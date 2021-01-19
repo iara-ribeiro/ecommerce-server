@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es6",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strictNullChecks": false,
+    "noUnusedLocals": false,
+    "esModuleInterop": false,
+    "pretty": true,
+    "skipLibCheck": true,
+    "noImplicitAny": false,
+    "sourceMap": true,
+    "moduleResolution": "node",
+    "outDir": "./dist",
+    "alwaysStrict": true,
+    "typeRoots" : ["./typings", "./node_modules/@types/"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}
+
