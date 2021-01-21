@@ -1,0 +1,26 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: ecommerce-poc
+Transform:
+- AWS::Serverless-2016-10-31
+Resources:
+  putItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/put-item.putItemHandler
+      Runtime: nodejs12.x
+      MemorySize: 128
+      Timeout: 100
+      Description: A simple example includes a HTTP post method to add one item to
+        a DynamoDB table.
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /order
+            Method: POST
+      CodeUri: putItemFunction
+Outputs:
+  WebEndpoint:
+    Description: API Gateway endpoint URL for Prod stage
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/

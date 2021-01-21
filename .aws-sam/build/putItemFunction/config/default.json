@@ -1,0 +1,11 @@
+{
+    "shopify": {
+        "apiKey": "61e4d1f3dbf567c97f8704a9ee0f426e",
+        "password": "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",
+        "hostname": "altus-test.myshopify.com"
+    },
+    "salesforce": {
+        "accountId": "0010n00001BnQ4F",
+        "contactId": "0030n00000pHID1"
+    }
+}
