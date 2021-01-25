@@ -59,7 +59,7 @@ function formatProduct (productShopify, productOrder, discountCodes, customer) {
         'sessionId': null,
         'environmentId': environmentId, 
         'adminId': salesForce.accountId,
-        'options': productShopify.variants
+        'options': productShopify.options
     };
 }
 
@@ -74,14 +74,15 @@ async function getProductById (productID, variantID) {
         const password = shopifyConfig.password; //env.shopify.password;
         const hostname = shopifyConfig.hostname; //env.shopify.hostname;
 
-        //const productUrl = `https://${apikey}:${password}@${hostname}/admin/api/2021-01/products/${productID}.json`;
+        const productUrl = `https://${apikey}:${password}@${hostname}/admin/api/2021-01/products/${productID}.json`;
 
         const variantURL = `https://${apikey}:${password}@${hostname}/admin/api/2021-01/variants/${variantID}.json`;
 
-        let result = await axios.get(variantURL);
+        let product = await axios.get(productUrl);
+        let variant = await axios.get(variantURL);
 
-        if (result.status === 200) {
-            return result.data;
+        if (product.status === 200 && variant.status === 200) {
+            return [product.data, variant.data];
         } else {
             throw (`error trying to retrieve product information ${productID}`);
         }

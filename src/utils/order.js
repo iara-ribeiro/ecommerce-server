@@ -1,6 +1,7 @@
 var product = require('./product');
 //const env = require('../../env.json');
 const config = require('config');
+const salesforce = require('./salesforce');
 
 
 /**
@@ -44,19 +45,18 @@ async function processOrder (order) {
     
     // go over the product list and get the product info
     const productList = await Promise.all(orderInfo.line_items.map(async (item) => {
-        let productInfo = await product.getProductById(item.id, item.variant);
+        let shopifyInfo = await product.getProductById(item.id, item.variant_id);
         let getProductMetafields = await product.getProductMetafields(item.id);
-        //return product.formatProduct(productInfo.product, item, orderInfo.discount_codes, orderInfo.customer);
-        return productInfo;
+
+        let productInfo = shopifyInfo[0];
+        let variantInfo = shopifyInfo[1];
+
+        return product.formatProduct(productInfo.product, item, orderInfo.discount_codes, orderInfo.customer);
     }));
 
-    // call create transaction data/json
-    
-    //save the quote
-    //const newQuote = createTransaction(order, productList);
+    const transaction = createTransaction(orderInfo, productList);
 
-    //return newQuote;
-    return productList;
+    return await salesforce.createQuote(transaction);
 };
 
 exports.processOrder = processOrder
