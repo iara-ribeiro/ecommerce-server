@@ -26,14 +26,14 @@ const sf = require ('../utils/salesforce');
  * @param {*} discountCodes 
  * @param {*} customer 
  */
-function formatProduct (productShopify, productOrder, discountCodes, customer) {
+function formatProduct (productShopify, productOrder, discountCodes, productMetafields) {
     const salesForce = config.get('salesforce');
 
     let totalTax = 0;
     let taxDetails = [];
-    let attendeeEmail = productOrder.properties.filter(item => item.name = 'NS_ITO_ATTENDEE_EMAIL__c__0');
-    let attendeeName = productOrder.properties.filter(item => item.name = 'NS_ITO_ATTENDEE_NAME__c__0');
-    let attendeePhone = productOrder.properties.filter(item => item.name = 'NS_ITO_ATTENDEE_PHONE__c__0');
+    let attendeeEmail = productOrder.properties.filter(item => item.name === 'NS_ITO_ATTENDEE_EMAIL__c__0');
+    let attendeeName = productOrder.properties.filter(item => item.name === 'NS_ITO_ATTENDEE_NAME__c__0');
+    let attendeePhone = productOrder.properties.filter(item => item.name === 'NS_ITO_ATTENDEE_PHONE__c__0');
 
     productOrder.tax_lines.map(item => {
         totalTax = totalTax + parseFloat(item.price);
@@ -43,7 +43,7 @@ function formatProduct (productShopify, productOrder, discountCodes, customer) {
     let environmentId = sf.getEnvironmentId();
     
     return {
-        'productId': null,
+        'productId': productMetafields.productId,
         'quantity': productOrder.quantity,
         'unitPrice': productOrder.price,
         'totalDiscount': productOrder.total_discount,
@@ -53,9 +53,9 @@ function formatProduct (productShopify, productOrder, discountCodes, customer) {
         'endDate': null,
         'promoCode': discountCodes.length > 0,
         'transactionId': productOrder.id,
-        'attendeeEmail': attendeeEmail,
-        'attendeeName': attendeeName,
-        'attendeePhone': attendeePhone,
+        'attendeeEmail': attendeeEmail[0].value,
+        'attendeeName': attendeeName[0].value,
+        'attendeePhone': attendeePhone[0].value,
         'sessionId': null,
         'environmentId': environmentId, 
         'adminId': salesForce.accountId,
@@ -95,19 +95,20 @@ async function getProductById (productID, variantID) {
  * Get product by id from Shopify API
  * @param {string} productID 
  */
-async function getProductMetafields (productID) {
+async function getProductMetafields (productID, variantID) {
     try {
         const shopifyConfig = config.get('shopify');
         const apikey = shopifyConfig.apiKey; //env.shopify.apiKey;
         const password = shopifyConfig.password; //env.shopify.password;
         const hostname = shopifyConfig.hostname; //env.shopify.hostname;
 
-        const url = `https://${apikey}:${password}@${hostname}/admin/api/2021-01/products/${productID}/metafields.json`;
+        const url = `https://${apikey}:${password}@${hostname}/admin/api/2021-01/products/${productID}/variants/${variantID}/metafields.json`;
 
         let result = await axios.get(url);
 
         if (result.status === 200) {
-            return result.data;
+            let data = result.data.metafields.filter(metafield => metafield.namespace === "salesforceData")[0].value;
+            return JSON.parse(data);
         } else {
             throw (`error trying to retrieve product information ${productID}`);
         }

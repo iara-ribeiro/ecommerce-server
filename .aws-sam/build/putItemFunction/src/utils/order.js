@@ -23,22 +23,10 @@ function createTransaction(order, productList) {
         'currencyIsoCode': order.currency,
         'contactId': salesForce.contactId,
         'accountId': salesForce.accountId,
-        'lineItem': productList
+        'lineItems': productList
     }
 }
 
-/**
- * 
- * @param {*} order 
- */
-function createQuote(order) {
-    //TODO: check if the quote already exists
-
-    //create a new quote
-    return {
-
-    };
-} 
 
 async function processOrder (order) {
     const orderInfo = JSON.parse(order);
@@ -46,16 +34,15 @@ async function processOrder (order) {
     // go over the product list and get the product info
     const productList = await Promise.all(orderInfo.line_items.map(async (item) => {
         let shopifyInfo = await product.getProductById(item.id, item.variant_id);
-        let getProductMetafields = await product.getProductMetafields(item.id);
+        let productMetafields = await product.getProductMetafields(item.id, item.variant_id);
 
         let productInfo = shopifyInfo[0];
         let variantInfo = shopifyInfo[1];
 
-        return product.formatProduct(productInfo.product, item, orderInfo.discount_codes, orderInfo.customer);
+        return product.formatProduct(productInfo.product, item, orderInfo.discount_codes, productMetafields);
     }));
 
     const transaction = createTransaction(orderInfo, productList);
-
     return await salesforce.createQuote(transaction);
 };
 

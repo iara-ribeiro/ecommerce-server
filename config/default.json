@@ -6,6 +6,10 @@
     },
     "salesforce": {
         "accountId": "0010n00001BnQ4F",
-        "contactId": "0030n00000pHID1"
+        "contactId": "0030n00000pHID1",
+        "loginUrl": "https://test.salesforce.com",
+        "username": "iara.ribeiro@altusgroup.com.xbu.dev",
+        "password": "4ltusgr0up1!",
+        "token": "w3L2cMxDofBBfKw8k7tRI5MJ"
     }
 }
