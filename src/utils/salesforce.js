@@ -67,104 +67,86 @@ async function readProducts(priceBookId, currencyCode, productId) {
     return await conn.apex.patch(url, body);
 }
 
-//https://developer.salesforce.com/docs/atlas.en-us.cpq_dev_api.meta/cpq_dev_api/cpq_api_quoteline_model_1.htm
-async function createQuoteItem(quote, product, productShopify) {
-    let quoteLineInfo = {
-        SBQQ__Quote__c: quote.Id,
-        SBQQ__Quantity__c: 1,
-        SBQQ__Product__c: product.record.PricebookEntries.records[0].Product2Id,
-        eComm_Unique_Id__c: quote.eComm_Unique_Id__c,
-        SBQQ__EndDate__c: quote.SBQQ__EndDate__c,
-        SBQQ__Quantity__c: productShopify.quantity,
-        SBQQ__ListPrice__c: productShopify.unitPrice,
-        SBQQ__Discount__c: productShopify.totalDiscount,
-        NS_ITO_ATTENDEE_EMAIL__c: productShopify.attendeeEmail,
-        NS_ITO_ATTENDEE_NAME__c: productShopify.attendeeName,
-        NS_ITO_ATTENDEE_PHONE__c: productShopify.attendeePhone,
-        Environment__c: productShopify.environmentId,
-        Product_Admin__c: null, //productShopify.adminId,
-        Selected_Session__c: productShopify.sessionId,
-        AVA_SFCPQ__TaxAmount__c: productShopify.taxAmount
-    }
-    
-    console.info('create quote line');
-    return await conn.sobject("SBQQ__QuoteLine__c").create([quoteLineInfo]);
-}
-
-async function updateQuoteLine(quote, product, productShopify) {
-    let quoteLine = await conn.sobject("SBQQ__QuoteLine__c")
-        .select('*')
-        .where(`SBQQ__Quote__c='${quote.Id}' and SBQQ__Product__c='${product.record.PricebookEntries.records[0].Product2Id}'`);
-
-    console.info(`update quote line for ${quote.Id}, ${product.record.PricebookEntries.records[0].Product2Id}`);
-    let newQuoteLineInfo = {
-        eComm_Unique_Id__c: quote.eComm_Unique_Id__c,
-        SBQQ__EndDate__c: quote.SBQQ__EndDate__c,
-        SBQQ__Quantity__c: productShopify.quantity,
-        SBQQ__ListPrice__c: productShopify.unitPrice,
-        SBQQ__Discount__c: productShopify.totalDiscount,
-        NS_ITO_ATTENDEE_EMAIL__c: productShopify.attendeeEmail,
-        NS_ITO_ATTENDEE_NAME__c: productShopify.attendeeName,
-        NS_ITO_ATTENDEE_PHONE__c: productShopify.attendeePhone,
-        Environment__c: productShopify.environmentId,
-        Product_Admin__c: productShopify.adminId,
-        Selected_Session__c: productShopify.sessionId,
-        AVA_SFCPQ__TaxAmount__c: productShopify.taxAmount,
-        AVA_SFCPQ__SalesTaxDetails__c: productShopify.taxDetails
-    };
-
-    let updatedQuote = await conn.sobject("SBQQ__QuoteLine__c")
-        .find({ Id : quoteLine[0].Id })
-        .update(newQuoteLineInfo);
-    
-    return updatedQuote;
-}
 
 /** Map the products from shopify to the quote line
  * https://developer.salesforce.com/docs/atlas.en-us.cpq_dev_api.meta/cpq_dev_api/cpq_api_product_model_8.htm
  */
 async function addQuoteProducts(lineItems, quote) {
     console.info(`start adding the products to quote - ${quote.Id}`);
-    let result;
+    let productList = [];
 
     if (lineItems.length > 0) {
-        result = await Promise.all(lineItems.map( async (item) => {
-            let product = JSON.parse(await readProducts('01s2M000008d5y8QAA', quote.CurrencyIsoCode, item.productId));
-            let lineItem = createQuoteItem(quote, product, item);
-            //let lineItem = updateQuoteLine(quote, product, item);
-            return lineItem;
+        await Promise.all(lineItems.map( async (item) => {
+            let product = JSON.parse(await readProducts(quote.SBQQ__PriceBookId__c, quote.CurrencyIsoCode, item.productId));
+            productList.push(product);
+
+            return product;
          }));     
     }
 
-    return result;
+    let quoteModel = await conn.apex.get(`/SBQQ/ServiceRouter?reader=SBQQ.QuoteAPI.QuoteReader&uid=${quote.Id}`);
+
+    let quoteWithProduct = await conn.apex.patch('/SBQQ/ServiceRouter?loader=SBQQ.QuoteAPI.QuoteProductAdder', {
+        context: JSON.stringify({
+            quote: JSON.parse(quoteModel),
+            products: productList,
+            groupKey: 0,
+            ignoreCalculate: true
+        })
+    });
+
+    console.info('adding transaction attributes');
+    quoteWithProduct = JSON.parse(quoteWithProduct);
+    
+    quoteWithProduct.lineItems.forEach((item, index) => {
+        productOrder = lineItems[index];
+
+        item.record.eComm_Unique_Id__c = productOrder.transactionId;
+        item.record.SBQQ__StartDate__c = productOrder.startDate;
+        item.record.SBQQ__EndDate__c = productOrder.endDate;
+        item.record.SBQQ__Quantity__c = productOrder.quantity;
+        item.record.SBQQ__ListPrice__c = productOrder.unitPrice;
+        item.record.SBQQ__Discount__c = productOrder.totalDiscount;
+        item.record.NS_ITO_ATTENDEE_EMAIL__c = productOrder.attendeeEmail;
+        item.record.NS_ITO_ATTENDEE_NAME__c = productOrder.attendeeName;
+        item.record.NS_ITO_ATTENDEE_PHONE__c = productOrder.attendeePhone;
+        item.record.Environment__c = productOrder.environmentId;
+        //item.record.Product_Admin__c = productOrder.adminId;
+        item.record.Selected_Session__c = productOrder.sessionId;
+        item.record.AVA_SFCPQ__TaxAmount__c = productOrder.taxAmount;
+        //item.record.AVA_SFCPQ__SalesTaxDetails__c = productOrder.taxDetails;
+    });
+
+    return quoteWithProduct;
 }
 
 /** Calculates the prices of a CPQ quote created at SF */
-async function calculateQuote(quote) {
+async function calculateQuote(quoteWithProduct) {
     //var body = {context: JSON.stringify(args.context)};
-    console.info(`calculate the quote - ${quote[0].Id}`);
+    console.info(`calculate the quote - ${quoteWithProduct.Id}`);
 
-    const body = { context: JSON.stringify({ quote: { record: quote[0] } })};
-    const url = '/SBQQ/ServiceRouter?loader=SBQQ.QuoteAPI.QuoteCalculator'
-
-    return await conn.apex.patch(url, body);
+    return await conn.apex.patch('/SBQQ/ServiceRouter?loader=SBQQ.QuoteAPI.QuoteCalculator', {
+        context: JSON.stringify({
+            quote: JSON.parse(quoteWithProduct)
+        })
+    });
 }
 
 /** Validate a CPQ quote and return any validation errors. */
 async function validateQuote(quote) {
-     //var body = {context: JSON.stringify(args.context)};
-    console.info(`Validate the quote - ${quote.Id}`);
-
-    const body = { context: JSON.stringify({ quote: { record: quote } })};
+    console.info(`Validate the quote - ${JSON.parse(quote).Id}`);
     const url = '/SBQQ/ServiceRouter?loader=QuoteAPI.QuoteValidator';
     
-    return await conn.apex.patch(url, body);
+    return await conn.apex.patch(url, {
+        context: quote
+    });
 }
 
 /** Save Quote API saves a CPQ quote. */
 async function saveQuote(quote) {
     //{saver: "SBQQ.QuoteAPI.QuoteSaver", model: {record: quote}
-    const body = { saver: "SBQQ.QuoteAPI.QuoteSaver", model: JSON.stringify({ record: quote[0] })};
+    console.info(`Saving the quote = ${quote.Id}`);
+    const body = { saver: "SBQQ.QuoteAPI.QuoteSaver", model: JSON.stringify({ record: quote })};
     const url = '/SBQQ/ServiceRouter';
 
     return await conn.apex.post(url, body);
@@ -179,7 +161,6 @@ async function createQuote(transaction) {
 
         const businessUnit = 'XBU';
         let quoteSF = await checkQuoteExists(transaction.transactionId);
-        let quote;
 
         console.info(`Quote exists - ${quoteSF.length}`);
 
@@ -207,11 +188,11 @@ async function createQuote(transaction) {
                 SBQQ__StartDate__c: new Date(),
                 SBQQ__SubscriptionTerm__c: 12,
                 SBQQ__Status__c: 'Approved',
+                ApprovalStatus__c: 'Approved',
                 Approval_Notes__c: 'This is an e-comm purchase and does not require approval notes.',
                 AA_Quote_Doc_Generated__c: true,
                 SBQQ__BillingFrequency__c: 'Annual',
                 Approval_Type__c: 'e-mail / Attach',
-                ApprovalStatus__c: 'Approved',
                 SBQQ__PaymentTerms__c: 'Due on receipt',
                 SBQQ__PriceBook__c: "01s2M000008d5y8QAA",
                 SBQQ__PriceBookId__c: "01s2M000008d5y8QAA",
@@ -230,30 +211,28 @@ async function createQuote(transaction) {
                 return ({'status': 'The quote is already resolved. Aborting process.'});
             }
 
-            /*if(quoteSF.SBQQ__LineItems__r.size() > 0) {
+            if(checkQuoteLines(quoteSF[0]).length > 0) {
                 return ({'status': 'Existing line items found. Aborting process.'});
-            }*/
+            }
         }
 
-        let lineItems = await addQuoteProducts(transaction.lineItems, quoteSF[0]);
+        let quoteWithProduct = await addQuoteProducts(transaction.lineItems, quoteSF[0]);
 
-        return lineItems;
-        //return quoteSF;
-        /*console.info(lineItems);
+        let calculatedQuote = await conn.apex.patch('/SBQQ/ServiceRouter?loader=SBQQ.QuoteAPI.QuoteCalculator', {
+            context: JSON.stringify({
+                quote: quoteWithProduct
+            })
+        });
 
-        let updatedQuote = await conn.sobject('SBQQ__Quote__c').update(
-            { 
-                Id : quoteSF[0].Id,
-                lineItems : lineItems
-            }
-        );
+        if (validateQuote(quoteWithProduct).length > 0) {
+            return ({'status': validateQuote(quoteWithProduct)});
+        }
 
-        return updatedQuote;*/
-        //let quoteModel = JSON.parse(await calculateQuote(quoteSF[0]));
-        //return await validateQuote(quoteModel.record);
+        return  await conn.apex.post('/SBQQ/ServiceRouter', {
+            saver: 'SBQQ.QuoteAPI.QuoteSaver',
+            model: calculatedQuote
+        });
 
-        //return saveQuote(quoteSF[0]);
-        
     } catch (err) {
         console.info(err);
         throw (err);
