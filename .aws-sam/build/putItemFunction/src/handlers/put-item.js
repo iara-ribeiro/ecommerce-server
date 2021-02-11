@@ -9,9 +9,10 @@ exports.putItemHandler = async (event) => {
     }
     // All log statements are written to CloudWatch
     console.info('received');
+    console.info(event.body);
 
     const quote = await order.processOrder(event.body);
-
+    
     const response = {
         statusCode: 200,
         body: JSON.stringify(quote)

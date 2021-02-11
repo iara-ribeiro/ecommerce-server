@@ -39,11 +39,14 @@ async function processOrder (order) {
         let productInfo = shopifyInfo[0];
         let variantInfo = shopifyInfo[1];
 
-        return product.formatProduct(productInfo.product, item, orderInfo.discount_codes, productMetafields);
+        return shopifyInfo;
+
+        //return product.formatProduct(productInfo.product, item, orderInfo.discount_codes, productMetafields);
     }));
 
-    const transaction = createTransaction(orderInfo, productList);
-    return await salesforce.createQuote(transaction);
+    //const transaction = createTransaction(orderInfo, productList);
+    //return await salesforce.createQuote(transaction);
+    return productList;
 };
 
 exports.processOrder = processOrder

@@ -3,7 +3,6 @@ var product = require('./product');
 const config = require('config');
 const salesforce = require('./salesforce');
 
-
 /**
  * transactionId - The unique identifier for the transaction. String len 50
  * serviceContractId - The Id of the service contract being amended, leave null for new orders. String len 18.
